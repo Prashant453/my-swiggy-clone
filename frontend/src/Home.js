@@ -9,10 +9,8 @@ function Home() {
   const [foods, setFoods] = useState([]);
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [currentSlide, setCurrentSlide] = useState(0);
-  
-  // NEW: Search State
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentSlide, setCurrentSlide] = useState(0);
 
   const bannerImages = [
     "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1600&q=80",
@@ -21,6 +19,7 @@ function Home() {
   ];
 
   useEffect(() => {
+    // Fetching from your RENDER Backend
     axios.get('https://foodverse-backend-jnas.onrender.com/api/foods')
       .then(response => setFoods(response.data))
       .catch(error => console.error("Error fetching data:", error));
@@ -31,12 +30,33 @@ function Home() {
     return () => clearInterval(interval);
   }, [bannerImages.length]);
 
-  const addToCart = (food) => setCart([...cart, food]);
-  const removeFromCart = (index) => setCart(cart.filter((_, i) => i !== index));
-  const totalAmount = cart.reduce((total, item) => total + item.price, 0);
-  const handleCheckout = () => navigate('/payment', { state: { cart, totalAmount } });
+  // --- QUANTITY LOGIC ---
+  const getItemQty = (id) => {
+    const item = cart.find(i => i.id === id);
+    return item ? item.quantity : 0;
+  };
 
-  // NEW: Search Filter Logic
+  const increaseQty = (food) => {
+    const existingItem = cart.find(item => item.id === food.id);
+    if (existingItem) {
+      setCart(cart.map(item => item.id === food.id ? { ...item, quantity: item.quantity + 1 } : item));
+    } else {
+      setCart([...cart, { ...food, quantity: 1 }]);
+    }
+  };
+
+  const decreaseQty = (food) => {
+    const existingItem = cart.find(item => item.id === food.id);
+    if (existingItem.quantity === 1) {
+      setCart(cart.filter(item => item.id !== food.id));
+    } else {
+      setCart(cart.map(item => item.id === food.id ? { ...item, quantity: item.quantity - 1 } : item));
+    }
+  };
+
+  const totalAmount = cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+  const handleCheckout = () => navigate('/payment', { state: { cart, totalAmount } });
+  
   const filteredFoods = foods.filter(food => 
     food.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     food.restaurant.toLowerCase().includes(searchTerm.toLowerCase())
@@ -46,58 +66,56 @@ function Home() {
     <div className="App">
       <nav className="navbar">
         <div className="logo">🍔 <h1>Food<span style={{color:'#fc8019'}}>Verse</span></h1></div>
-        
-        {/* NEW: Search Bar in Navbar */}
         <div className="search-bar">
-          <input 
-            type="text" 
-            placeholder="Search for food or restaurant..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+          <input type="text" placeholder="Search for food..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}/>
           <span className="search-icon">🔍</span>
         </div>
-
         <button className="cart-btn" onClick={() => setIsCartOpen(!isCartOpen)}>
-          🛒 Cart <span className="cart-count">{cart.length}</span>
+          🛒 Cart <span className="cart-count">{cart.reduce((acc, item) => acc + item.quantity, 0)}</span>
         </button>
       </nav>
 
-      {/* Only show Slider if NOT searching */}
       {searchTerm === "" && (
         <div className="hero-section">
           {bannerImages.map((img, index) => (
             <div key={index} className={`slide ${index === currentSlide ? 'active' : ''}`} style={{ backgroundImage: `url(${img})` }}></div>
           ))}
           <div className="hero-overlay"></div>
-          <div className="hero-content">
-            <h2>Hungry? We got you.</h2>
-            <p>Order food from favourite restaurants near you.</p>
-          </div>
+          <div className="hero-content"><h2>Hungry? We got you.</h2><p>Order food from favourite restaurants near you.</p></div>
         </div>
       )}
 
       <div className="main-container">
-        <h2 className="section-title">
-          {searchTerm ? `Search Results for "${searchTerm}"` : "Top Picks for You"}
-        </h2>
+        <h2 className="section-title">{searchTerm ? `Results for "${searchTerm}"` : "Top Picks for You"}</h2>
         <div className="food-grid">
-          {filteredFoods.length > 0 ? filteredFoods.map(food => (
-            <div className="card" key={food.id}>
-              <div className="card-img-container">
-                <img src={food.image} alt={food.name} />
-                <div className="rating-badge">⭐ {food.rating}</div>
-              </div>
-              <div className="details">
-                <h3>{food.name}</h3>
-                <p className="restaurant">{food.restaurant}</p>
-                <div className="price-row">
-                  <span className="price">₹{food.price}</span>
-                  <button className="add-btn" onClick={() => addToCart(food)}>ADD</button>
+          {filteredFoods.map(food => {
+            const qty = getItemQty(food.id);
+            return (
+              <div className="card" key={food.id}>
+                <div className="card-img-container">
+                  <img src={food.image} alt={food.name} />
+                  <div className="rating-badge">⭐ {food.rating}</div>
+                </div>
+                <div className="details">
+                  <h3>{food.name}</h3>
+                  <p className="restaurant">{food.restaurant}</p>
+                  <div className="price-row">
+                    <span className="price">₹{food.price}</span>
+                    {/* BUTTON LOGIC */}
+                    {qty === 0 ? (
+                      <button className="add-btn" onClick={() => increaseQty(food)}>ADD</button>
+                    ) : (
+                      <div className="qty-control">
+                        <button className="qty-btn" onClick={() => decreaseQty(food)}>-</button>
+                        <span className="qty-count">{qty}</span>
+                        <button className="qty-btn" onClick={() => increaseQty(food)}>+</button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )) : <p className="no-results">No food found! 😢</p>}
+            );
+          })}
         </div>
       </div>
 
@@ -105,15 +123,21 @@ function Home() {
       <div className={`cart-sidebar ${isCartOpen ? 'open' : ''}`}>
         <div className="cart-header"><h3>Your Cart</h3><button className="close-btn" onClick={() => setIsCartOpen(false)}>×</button></div>
         <div className="cart-items">
-          {cart.length === 0 ? <div className="empty-cart">Cart is empty</div> : cart.map((item, i) => (
-            <div key={i} className="cart-item-row"><span>{item.name}</span><button className="remove-btn" onClick={() => removeFromCart(i)}>Remove</button></div>
+          {cart.length === 0 ? <div className="empty-cart">Cart is empty</div> : cart.map((item) => (
+            <div key={item.id} className="cart-item-row">
+              <div className="cart-item-info"><span>{item.name}</span><small>₹{item.price} x {item.quantity}</small></div>
+              <div className="cart-qty-mini">
+                <button onClick={() => decreaseQty(item)}>-</button>
+                <span>{item.quantity}</span>
+                <button onClick={() => increaseQty(item)}>+</button>
+              </div>
+            </div>
           ))}
         </div>
-        {cart.length > 0 && <div className="cart-footer"><button className="checkout-btn" onClick={handleCheckout}>PROCEED TO PAY ₹{totalAmount}</button></div>}
+        {cart.length > 0 && <div className="cart-footer"><button className="checkout-btn" onClick={handleCheckout}>PAY ₹{totalAmount}</button></div>}
       </div>
       {isCartOpen && <div className="overlay" onClick={() => setIsCartOpen(false)}></div>}
     </div>
   );
 }
-
 export default Home;
